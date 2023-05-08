@@ -15,18 +15,18 @@ public:
 
     getting_params();
 
-    RCLCPP_INFO(this->get_logger(), "Degrees: %f", degrees);
+    // RCLCPP_INFO(this->get_logger(), "Degrees: %f", degrees);
 
     degrees = (degrees * 3.1416) / 180;
 
     tiempo = degrees / 0.5;
-    RCLCPP_INFO(this->get_logger(), "Tiempo 1 : %fs", tiempo);
+    // RCLCPP_INFO(this->get_logger(), "Tiempo 1 : %fs", tiempo);
 
     tiempo += 1;
 
-    RCLCPP_INFO(this->get_logger(), "Tiempo 2 :  %fs", tiempo);
+    // RCLCPP_INFO(this->get_logger(), "Tiempo 2 :  %fs", tiempo);
 
-    degrees = (degrees * 3.1416) / 180;
+    // degrees = (degrees * 3.1416) / 180;
 
     publisher_ =
         this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);

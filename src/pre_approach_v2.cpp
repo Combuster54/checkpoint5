@@ -9,7 +9,6 @@
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
-
 using GoToLoadingMsg = attach_shelf::srv::GoToLoading;
 
 class ServiceClient : public rclcpp::Node {
@@ -69,7 +68,8 @@ public:
   bool recieve_f_approach = false;
   ServiceClient() : Node("service_client") {
 
-    client_ = this->create_client<attach_shelf::srv::GoToLoading>("find_wall");
+    client_ =
+        this->create_client<attach_shelf::srv::GoToLoading>("approach_shelf");
 
     timer_ = this->create_wall_timer(
         1s, std::bind(&ServiceClient::timer_callback, this));
@@ -85,33 +85,37 @@ public:
 
   Topics() : Node("pre_approach_node") {
 
-    this->declare_parameter("obstacle", 0.5);
-    this->declare_parameter("degrees", 45);
-    this->declare_parameter("final_approach", false);
+    // Create client server
+    clientApproahSrv = std::make_shared<ServiceClient>();
 
+    // Declare parameters
+    this->declare_parameter("obstacle", 0.3);
+    this->declare_parameter("degrees", 90);
+    this->declare_parameter("final_approach", true);
+
+    // Obtain parameters
     getting_params();
 
-    RCLCPP_INFO(this->get_logger(), "Degrees: %f", degrees);
+    // RCLCPP_INFO(this->get_logger(), "Degrees: %f", degrees);
 
     degrees = (degrees * 3.1416) / 180;
-
     tiempo = degrees / 0.5;
-    RCLCPP_INFO(this->get_logger(), "Tiempo 1 : %fs", tiempo);
+    // RCLCPP_INFO(this->get_logger(), "Tiempo 1 : %fs", tiempo);
+    tiempo += 1.5;
+    // RCLCPP_INFO(this->get_logger(), "Tiempo 2 :  %fs", tiempo);
 
-    tiempo += 1;
-
-    RCLCPP_INFO(this->get_logger(), "Tiempo 2 :  %fs", tiempo);
-
-    degrees = (degrees * 3.1416) / 180;
-
+    // Creating cmd_vel publisher and scan subscriber
     publisher_ =
         this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
     subscription_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
         "/scan", rclcpp::SensorDataQoS(),
         std::bind(&Topics::scan_callback, this, _1));
 
+    // Creating timer
     timer_ = this->create_wall_timer(100ms,
                                      std::bind(&Topics::timer_callback, this));
+
+    // Initialize laser values
     this->laser_left = 0.0;
     this->laser_right = 0.0;
     this->laser_forward = 0.0;
@@ -123,18 +127,50 @@ private:
   float obstacle;
   float degrees;
   bool final_approach;
-  bool obs = false;
+  std::vector<float> laser_range;
+  float min_left_laser;
+  float min_right_laser;
+  float min_front_laser;
+
+  // I use ignore inside timer_callback for the first task: move forward until
+  // front_laser < 0.3 m
   bool ignore = false;
+  // Obs is used after first task end. robot spin left/right depending parameter
+  // "degrees"
+  bool obs = false;
+  // Time to spin
   float tiempo;
+
   void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
-    this->laser_left = msg->ranges[180];
-    this->laser_right = msg->ranges[540];
-    this->laser_forward = msg->ranges[360];
+
+    this->laser_range = msg->ranges;
     // RCLCPP_INFO(this->get_logger(), "[LEFT] = '%f'", this->laser_left);
     // RCLCPP_INFO(this->get_logger(), "[RIGHT] = '%f'", this->laser_right);
     // RCLCPP_INFO(this->get_logger(), "[FORWARD] = '%f'", this->laser_forward);
   }
 
+  void transformScan() {
+
+    std::vector<float> front_laser;
+    std::copy(this->laser_range.begin() + 350, this->laser_range.begin() + 371,
+              std::back_inserter(front_laser));
+
+    std::vector<float> right_laser;
+    std::copy(this->laser_range.begin() + 170, this->laser_range.begin() + 200,
+              std::back_inserter(right_laser));
+
+    std::vector<float> left_laser;
+    std::copy(this->laser_range.begin() + 530, this->laser_range.begin() + 551,
+              std::back_inserter(left_laser));
+
+    this->min_front_laser =
+        *min_element(front_laser.begin(), front_laser.end());
+
+    this->min_right_laser =
+        *min_element(right_laser.begin(), right_laser.end());
+
+    this->min_left_laser = *min_element(left_laser.begin(), left_laser.end());
+  }
   void getting_params() {
     obstacle =
         this->get_parameter("obstacle").get_parameter_value().get<float>();
@@ -147,7 +183,8 @@ private:
 
     if (!ignore) {
 
-      if (this->laser_forward > obstacle && obs == false) {
+      transformScan();
+      if (this->min_front_laser > obstacle && obs == false) {
 
         this->twist_msg.angular.z = 0.0;
         this->twist_msg.linear.x = 0.3;
@@ -162,7 +199,6 @@ private:
         ignore = true;
       }
     }
-
     if (obs) {
 
       if (degrees > 0.0) {
@@ -199,8 +235,18 @@ private:
 };
 
 int main(int argc, char *argv[]) {
+
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<Topics>());
+  
+  auto first_task = std::make_shared<Topics>();
+  auto client_node = first_task->clientApproahSrv;
+
+  rclcpp::executors::MultiThreadedExecutor executor;
+
+  executor.add_node(first_task);
+  executor.add_node(client_node);
+
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }

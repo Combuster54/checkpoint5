@@ -29,13 +29,12 @@ endif()
 add_executable(pre_approach src/pre_approach.cpp)
 ament_target_dependencies(pre_approach rclcpp geometry_msgs sensor_msgs nav_msgs)
 
-
 add_executable(pre_approach_v2 src/pre_approach_v2.cpp)
 ament_target_dependencies(pre_approach_v2 rclcpp geometry_msgs sensor_msgs attach_shelf #add more 
 )
 
 add_executable(approach_server src/approach_service_server.cpp)
-ament_target_dependencies(approach_server rclcpp geometry_msgs sensor_msgs attach_shelf tf2_ros)
+ament_target_dependencies(approach_server rclcpp geometry_msgs sensor_msgs attach_shelf tf2_ros nav_msgs)
 
 
 # Install executable files
@@ -49,6 +48,7 @@ install(TARGETS
 # Install launch files.
 install(DIRECTORY
   launch
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 
@@ -56,6 +56,5 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GoToLoading.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
-
 
 ament_package()
